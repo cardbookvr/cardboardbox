@@ -67,6 +67,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private float[] cubeView;
 
+    private static final float TIME_DELTA = 0.3f;
+
     // Rendering variables
     private int simpleVertexShader;
     private int simpleFragmentShader;
@@ -116,6 +118,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     public void onNewFrame(HeadTransform headTransform) {
         // Build the camera matrix and apply it to the ModelView.
         Matrix.setLookAtM(camera, 0, 0.0f, 0.0f, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+
+        Matrix.rotateM(cubeTransform, 0, TIME_DELTA, 0.5f, 0.5f, 1.0f);
     }
 
     @Override
