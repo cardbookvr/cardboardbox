@@ -40,6 +40,13 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private float[] triTransform;
 
+    private static float cubeCoords[] = Cube.CUBE_COORDS;
+    private final int cubeVertexCount = cubeCoords.length / COORDS_PER_VERTEX;
+    private float cubeColor[] = { 0.8f, 0.6f, 0.2f, 0.0f }; // yellow-ish
+    private float[] cubeTransform;
+    private float cubeDistance = 5f;
+
+
     // Viewing variables
     private static final float Z_NEAR = 0.1f;
     private static final float Z_FAR = 100.0f;
@@ -51,6 +58,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private float[] triView;
 
+    private float[] cubeView;
+
     // Rendering variables
     private int simpleVertexShader;
     private int simpleFragmentShader;
@@ -58,6 +67,12 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private int triPositionParam;
     private int triColorParam;
     private int triMVPMatrixParam;
+
+    private FloatBuffer cubeVerticesBuffer;
+    private int cubeProgram;
+    private int cubePositionParam;
+    private int cubeColorParam;
+    private int cubeMVPMatrixParam;
 
 
     @Override
@@ -75,6 +90,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         triTransform = new float[16];
         triView = new float[16];
+
+        cubeTransform = new float[16];
+        cubeView = new float[16];
     }
 
     @Override
@@ -99,6 +117,11 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         Matrix.multiplyMM(modelViewProjection, 0, perspective, 0, triView, 0);
 
         drawTriangle();
+
+        Matrix.multiplyMM(cubeView, 0, view, 0, cubeTransform, 0);
+        Matrix.multiplyMM(modelViewProjection, 0, perspective, 0,
+                cubeView, 0);
+        drawCube();
     }
 
     @Override
@@ -116,6 +139,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         initializeScene();
         compileShaders();
         prepareRenderingTriangle();
+        prepareRenderingCube();
     }
 
     @Override
@@ -141,10 +165,24 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, triVertexCount);
     }
 
+    private void drawCube() {
+        GLES20.glUseProgram(cubeProgram);
+        GLES20.glUniformMatrix4fv(cubeMVPMatrixParam, 1, false, modelViewProjection, 0);
+        GLES20.glVertexAttribPointer(cubePositionParam, COORDS_PER_VERTEX,
+                GLES20.GL_FLOAT, false, 0, cubeVerticesBuffer);
+        GLES20.glUniform4fv(cubeColorParam, 1, cubeColor, 0);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, cubeVertexCount);
+    }
+
     private void initializeScene() {
         // Position the triangle
         Matrix.setIdentityM(triTransform, 0);
         Matrix.translateM(triTransform, 0, 5, 0, -5);
+
+        // Rotate and position the cube
+        Matrix.setIdentityM(cubeTransform, 0);
+        Matrix.translateM(cubeTransform, 0, 0, 0, -cubeDistance);
+        Matrix.rotateM(cubeTransform, 0, 30, 1, 1, 0);
     }
 
     private void compileShaders() {
@@ -187,6 +225,30 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         triColorParam = GLES20.glGetUniformLocation(triProgram, "u_Color");
         // get handle to shape's transformation matrix
         triMVPMatrixParam = GLES20.glGetUniformLocation(triProgram, "u_MVP");
+    }
+
+    private void prepareRenderingCube() {
+        // Allocate buffers
+        ByteBuffer bb = ByteBuffer.allocateDirect(cubeCoords.length * 4);
+        bb.order(ByteOrder.nativeOrder());
+        cubeVerticesBuffer = bb.asFloatBuffer();
+        cubeVerticesBuffer.put(cubeCoords);
+        cubeVerticesBuffer.position(0);
+
+        // Create GL program
+        cubeProgram = GLES20.glCreateProgram();
+        GLES20.glAttachShader(cubeProgram, simpleVertexShader);
+        GLES20.glAttachShader(cubeProgram, simpleFragmentShader);
+        GLES20.glLinkProgram(cubeProgram);
+        GLES20.glUseProgram(cubeProgram);
+
+        // Get shader params
+        cubePositionParam = GLES20.glGetAttribLocation(cubeProgram, "a_Position");
+        cubeColorParam = GLES20.glGetUniformLocation(cubeProgram, "u_Color");
+        cubeMVPMatrixParam = GLES20.glGetUniformLocation(cubeProgram, "u_MVP");
+
+        // Enable arrays
+        GLES20.glEnableVertexAttribArray(cubePositionParam);
     }
 
 
