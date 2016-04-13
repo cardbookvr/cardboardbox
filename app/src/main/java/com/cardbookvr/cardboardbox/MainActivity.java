@@ -24,6 +24,10 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private static final String TAG = "MainActivity";
 
     // Scene variables
+    // light positioned just above the user
+    private static final float[] LIGHT_POS_IN_WORLD_SPACE = new float[]{0.0f, 2.0f, 0.0f, 1.0f };
+    private final float[] lightPosInEyeSpace = new float[4];
+
     // Model variables
     private static final int COORDS_PER_VERTEX = 3;
     private static float triCoords[] = {
@@ -41,6 +45,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private float[] triTransform;
 
     private static float cubeCoords[] = Cube.CUBE_COORDS;
+    private static float cubeColors[] = Cube.cubeFacesToArray(Cube.CUBE_COLORS_FACES, 4);
+    private static float cubeNormals[] = Cube.cubeFacesToArray(Cube.CUBE_NORMALS_FACES, 3);
+
     private final int cubeVertexCount = cubeCoords.length / COORDS_PER_VERTEX;
     private float cubeColor[] = { 0.8f, 0.6f, 0.2f, 0.0f }; // yellow-ish
     private float[] cubeTransform;
@@ -69,10 +76,20 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private int triMVPMatrixParam;
 
     private FloatBuffer cubeVerticesBuffer;
+    private FloatBuffer cubeColorsBuffer;
+    private FloatBuffer cubeNormalsBuffer;
+
     private int cubeProgram;
     private int cubePositionParam;
     private int cubeColorParam;
     private int cubeMVPMatrixParam;
+
+    private int lightVertexShader;
+    private int passthroughFragmentShader;
+
+    private int cubeNormalParam;
+    private int cubeModelViewParam;
+    private int cubeLightPosParam;
 
 
     @Override
@@ -108,6 +125,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         // Apply the eye transformation to the camera
         Matrix.multiplyMM(view, 0, eye.getEyeView(), 0, camera, 0);
+
+        // Calculate position of the light
+        Matrix.multiplyMV(lightPosInEyeSpace, 0, view, 0, LIGHT_POS_IN_WORLD_SPACE, 0);
 
         // Get the perspective transformation
         float[] perspective = eye.getPerspective(Z_NEAR, Z_FAR);
@@ -167,10 +187,22 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private void drawCube() {
         GLES20.glUseProgram(cubeProgram);
+
+        // Set the light position in the shader
+        GLES20.glUniform3fv(cubeLightPosParam, 1, lightPosInEyeSpace, 0);
+
+        // Set the ModelView in the shader, used to calculate lighting
+        GLES20.glUniformMatrix4fv(cubeModelViewParam, 1, false, cubeView, 0);
+
         GLES20.glUniformMatrix4fv(cubeMVPMatrixParam, 1, false, modelViewProjection, 0);
+
         GLES20.glVertexAttribPointer(cubePositionParam, COORDS_PER_VERTEX,
                 GLES20.GL_FLOAT, false, 0, cubeVerticesBuffer);
-        GLES20.glUniform4fv(cubeColorParam, 1, cubeColor, 0);
+        GLES20.glVertexAttribPointer(cubeNormalParam, 3,
+                GLES20.GL_FLOAT, false, 0, cubeNormalsBuffer);
+        GLES20.glVertexAttribPointer(cubeColorParam, 4,
+                GLES20.GL_FLOAT, false, 0, cubeColorsBuffer);
+
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, cubeVertexCount);
     }
 
@@ -188,6 +220,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private void compileShaders() {
         simpleVertexShader = loadShader(GLES20.GL_VERTEX_SHADER, R.raw.mvp_vertex);
         simpleFragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, R.raw.simple_fragment);
+
+        lightVertexShader = loadShader(GLES20.GL_VERTEX_SHADER, R.raw.light_vertex);
+        passthroughFragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, R.raw.passthrough_fragment);
     }
 
     private void prepareRenderingTriangle() {
@@ -235,20 +270,38 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         cubeVerticesBuffer.put(cubeCoords);
         cubeVerticesBuffer.position(0);
 
+        ByteBuffer bbColors = ByteBuffer.allocateDirect(cubeColors.length * 4);
+        bbColors.order(ByteOrder.nativeOrder());
+        cubeColorsBuffer = bbColors.asFloatBuffer();
+        cubeColorsBuffer.put(cubeColors);
+        cubeColorsBuffer.position(0);
+
+        ByteBuffer bbNormals = ByteBuffer.allocateDirect(cubeNormals.length * 4);
+        bbNormals.order(ByteOrder.nativeOrder());
+        cubeNormalsBuffer = bbNormals.asFloatBuffer();
+        cubeNormalsBuffer.put(cubeNormalParam);
+        cubeNormalsBuffer.position(0);
+
         // Create GL program
         cubeProgram = GLES20.glCreateProgram();
-        GLES20.glAttachShader(cubeProgram, simpleVertexShader);
-        GLES20.glAttachShader(cubeProgram, simpleFragmentShader);
+        GLES20.glAttachShader(cubeProgram, lightVertexShader);
+        GLES20.glAttachShader(cubeProgram, passthroughFragmentShader);
         GLES20.glLinkProgram(cubeProgram);
         GLES20.glUseProgram(cubeProgram);
 
         // Get shader params
-        cubePositionParam = GLES20.glGetAttribLocation(cubeProgram, "a_Position");
-        cubeColorParam = GLES20.glGetUniformLocation(cubeProgram, "u_Color");
+        cubeModelViewParam = GLES20.glGetUniformLocation(cubeProgram, "u_MVMatrix");
         cubeMVPMatrixParam = GLES20.glGetUniformLocation(cubeProgram, "u_MVP");
+        cubeLightPosParam = GLES20.glGetUniformLocation(cubeProgram, "u_LightPos");
+
+        cubePositionParam = GLES20.glGetAttribLocation(cubeProgram, "a_Position");
+        cubeNormalParam = GLES20.glGetAttribLocation(cubeProgram, "a_Normal");
+        cubeColorParam = GLES20.glGetAttribLocation(cubeProgram, "a_Color");
 
         // Enable arrays
         GLES20.glEnableVertexAttribArray(cubePositionParam);
+        GLES20.glEnableVertexAttribArray(cubeNormalParam);
+        GLES20.glEnableVertexAttribArray(cubeColorParam);
     }
 
 
