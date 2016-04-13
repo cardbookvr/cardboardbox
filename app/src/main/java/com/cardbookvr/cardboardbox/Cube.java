@@ -84,6 +84,16 @@ public class Cube {
             0.0f, -1.0f, 0.0f,
     };
 
+    public static final float[] CUBE_FOUND_COLORS_FACES = new float[]{
+            // Same yellow for front, right, back, left, top, bottom faces
+            1.0f,  0.65f, 0.0f, 1.0f,
+            1.0f,  0.65f, 0.0f, 1.0f,
+            1.0f,  0.65f, 0.0f, 1.0f,
+            1.0f,  0.65f, 0.0f, 1.0f,
+            1.0f,  0.65f, 0.0f, 1.0f,
+            1.0f,  0.65f, 0.0f, 1.0f,
+    };
+
     /**
      * Utility method for generating float arrays for cube faces
      *

@@ -46,6 +46,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private static float cubeCoords[] = Cube.CUBE_COORDS;
     private static float cubeColors[] = Cube.cubeFacesToArray(Cube.CUBE_COLORS_FACES, 4);
+    private static float cubeFoundColors[] = Cube.cubeFacesToArray(Cube.CUBE_FOUND_COLORS_FACES, 4);
     private static float cubeNormals[] = Cube.cubeFacesToArray(Cube.CUBE_NORMALS_FACES, 3);
 
     private final int cubeVertexCount = cubeCoords.length / COORDS_PER_VERTEX;
@@ -78,6 +79,11 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private float[] floorView;
 
+    private static final float YAW_LIMIT = 0.12f;
+    private static final float PITCH_LIMIT = 0.12f;
+
+    private float[] headView;
+
 
     // Rendering variables
     private int simpleVertexShader;
@@ -89,6 +95,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     private FloatBuffer cubeVerticesBuffer;
     private FloatBuffer cubeColorsBuffer;
+    private FloatBuffer cubeFoundColorsBuffer;
     private FloatBuffer cubeNormalsBuffer;
 
     private int cubeProgram;
@@ -139,6 +146,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         floorTransform = new float[16];
         floorView = new float[16];
+
+        headView = new float[16];
     }
 
     @Override
@@ -147,6 +156,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         Matrix.setLookAtM(camera, 0, 0.0f, 0.0f, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
         Matrix.rotateM(cubeTransform, 0, TIME_DELTA, 0.5f, 0.5f, 1.0f);
+
+        headTransform.getHeadView(headView, 0);
     }
 
     @Override
@@ -237,8 +248,14 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
                 GLES20.GL_FLOAT, false, 0, cubeVerticesBuffer);
         GLES20.glVertexAttribPointer(cubeNormalParam, 3,
                 GLES20.GL_FLOAT, false, 0, cubeNormalsBuffer);
-        GLES20.glVertexAttribPointer(cubeColorParam, 4,
-                GLES20.GL_FLOAT, false, 0, cubeColorsBuffer);
+
+        if (isLookingAtObject(cubeView, cubeTransform)) {
+            GLES20.glVertexAttribPointer(cubeColorParam, 4,
+                    GLES20.GL_FLOAT, false, 0, cubeFoundColorsBuffer);
+        } else {
+            GLES20.glVertexAttribPointer(cubeColorParam, 4,
+                    GLES20.GL_FLOAT, false, 0, cubeColorsBuffer);
+        }
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, cubeVertexCount);
     }
@@ -343,6 +360,12 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         cubeColorsBuffer.put(cubeColors);
         cubeColorsBuffer.position(0);
 
+        ByteBuffer bbFoundColors = ByteBuffer.allocateDirect(cubeFoundColors.length * 4);
+        bbFoundColors.order(ByteOrder.nativeOrder());
+        cubeFoundColorsBuffer = bbFoundColors.asFloatBuffer();
+        cubeFoundColorsBuffer.put(cubeFoundColors);
+        cubeFoundColorsBuffer.position(0);
+
         ByteBuffer bbNormals = ByteBuffer.allocateDirect(cubeNormals.length * 4);
         bbNormals.order(ByteOrder.nativeOrder());
         cubeNormalsBuffer = bbNormals.asFloatBuffer();
@@ -414,6 +437,25 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         GLES20.glEnableVertexAttribArray(floorColorParam);
     }
 
+    /**
+     * Check if user is looking at object by calculating where the
+     object is in eye-space.
+     *
+     * @return true if the user is looking at the object.
+     */
+    private boolean isLookingAtObject(float[] modelView, float[] modelTransform) {
+        float[] initVec = { 0, 0, 0, 1.0f };
+        float[] objPositionVec = new float[4];
+
+        // Convert object space to camera space. Use the headView from onNewFrame.
+        Matrix.multiplyMM(modelView, 0, headView, 0, modelTransform, 0);
+        Matrix.multiplyMV(objPositionVec, 0, modelView, 0, initVec, 0);
+
+        float pitch = (float) Math.atan2(objPositionVec[1], -objPositionVec[2]);
+        float yaw = (float) Math.atan2(objPositionVec[0], -objPositionVec[2]);
+
+        return Math.abs(pitch) < PITCH_LIMIT && Math.abs(yaw) < YAW_LIMIT;
+    }
 
     /**
      * Utility method for compiling a OpenGL shader.
