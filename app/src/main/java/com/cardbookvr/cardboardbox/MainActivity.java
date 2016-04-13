@@ -1,6 +1,7 @@
 package com.cardbookvr.cardboardbox;
 
 import android.opengl.GLES20;
+import android.opengl.Matrix;
 import android.os.Bundle;
 
 import com.google.vrtoolkit.cardboard.CardboardActivity;
@@ -38,12 +39,21 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private FloatBuffer triVerticesBuffer;
 
     // Viewing variables
+    private static final float Z_NEAR = 0.1f;
+    private static final float Z_FAR = 100.0f;
+    private static final float CAMERA_Z = 0.01f;
+
+    private float[] camera;
+    private float[] view;
+    private float[] modelViewProjection;
+
     // Rendering variables
     private int simpleVertexShader;
     private int simpleFragmentShader;
     private int triProgram;
     private int triPositionParam;
     private int triColorParam;
+    private int triMVPMatrixParam;
 
 
     @Override
@@ -54,15 +64,32 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         CardboardView cardboardView = (CardboardView) findViewById(R.id.cardboard_view);
         cardboardView.setRenderer(this);
         setCardboardView(cardboardView);
+
+        camera = new float[16];
+        view = new float[16];
+        modelViewProjection = new float[16];
     }
 
     @Override
     public void onNewFrame(HeadTransform headTransform) {
-
+        // Build the camera matrix and apply it to the ModelView.
+        Matrix.setLookAtM(camera, 0, 0.0f, 0.0f, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
     }
 
     @Override
     public void onDrawEye(Eye eye) {
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+
+        // Apply the eye transformation to the camera
+        Matrix.multiplyMM(view, 0, eye.getEyeView(), 0, camera, 0);
+
+        // Get the perspective transformation
+        float[] perspective = eye.getPerspective(Z_NEAR, Z_FAR);
+
+        // Apply perspective transformation to the view, and draw
+        Matrix.multiplyMM(modelViewProjection, 0, perspective, 0, view, 0);
+
         drawTriangle();
     }
 
@@ -92,6 +119,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         // Add program to OpenGL ES environment
         GLES20.glUseProgram(triProgram);
 
+        // Pass the MVP transformation to the shader
+        GLES20.glUniformMatrix4fv(triMVPMatrixParam, 1, false, modelViewProjection, 0);
+
         // Prepare the coordinate data
         GLES20.glVertexAttribPointer(triPositionParam, COORDS_PER_VERTEX,
                 GLES20.GL_FLOAT, false, 0, triVerticesBuffer);
@@ -107,7 +137,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     }
 
     private void compileShaders() {
-        simpleVertexShader = loadShader(GLES20.GL_VERTEX_SHADER, R.raw.simple_vertex);
+        simpleVertexShader = loadShader(GLES20.GL_VERTEX_SHADER, R.raw.mvp_vertex);
         simpleFragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, R.raw.simple_fragment);
     }
 
@@ -144,6 +174,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         GLES20.glEnableVertexAttribArray(triPositionParam);
         // get handle to fragment shader's u_Color member
         triColorParam = GLES20.glGetUniformLocation(triProgram, "u_Color");
+        // get handle to shape's transformation matrix
+        triMVPMatrixParam = GLES20.glGetUniformLocation(triProgram, "u_MVP");
     }
 
 
