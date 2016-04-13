@@ -53,6 +53,13 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private float[] cubeTransform;
     private float cubeDistance = 5f;
 
+    private static float floorCoords[] = Floor.FLOOR_COORDS;
+    private static float floorColors[] = Floor.FLOOR_COLORS;
+    private static float floorNormals[] = Floor.FLOOR_NORMALS;
+    private final int floorVertexCount = floorCoords.length / COORDS_PER_VERTEX;
+    private float[] floorTransform;
+    private float floorDepth = 20f;
+
 
     // Viewing variables
     private static final float Z_NEAR = 0.1f;
@@ -68,6 +75,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private float[] cubeView;
 
     private static final float TIME_DELTA = 0.3f;
+
+    private float[] floorView;
+
 
     // Rendering variables
     private int simpleVertexShader;
@@ -93,6 +103,20 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private int cubeModelViewParam;
     private int cubeLightPosParam;
 
+    private int gridFragmentShader;
+
+    private FloatBuffer floorVerticesBuffer;
+    private FloatBuffer floorColorsBuffer;
+    private FloatBuffer floorNormalsBuffer;
+    private int floorProgram;
+    private int floorPositionParam;
+    private int floorColorParam;
+    private int floorMVPMatrixParam;
+    private int floorNormalParam;
+    private int floorModelParam;
+    private int floorModelViewParam;
+    private int floorLightPosParam;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,6 +136,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         cubeTransform = new float[16];
         cubeView = new float[16];
+
+        floorTransform = new float[16];
+        floorView = new float[16];
     }
 
     @Override
@@ -146,6 +173,11 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         Matrix.multiplyMM(modelViewProjection, 0, perspective, 0,
                 cubeView, 0);
         drawCube();
+
+        Matrix.multiplyMM(floorView, 0, view, 0, floorTransform, 0);
+        Matrix.multiplyMM(modelViewProjection, 0, perspective, 0, floorView, 0);
+        drawFloor();
+
     }
 
     @Override
@@ -164,6 +196,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         compileShaders();
         prepareRenderingTriangle();
         prepareRenderingCube();
+        prepareRenderingFloor();
     }
 
     @Override
@@ -210,6 +243,30 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, cubeVertexCount);
     }
 
+    private void drawFloor() {
+        GLES20.glUseProgram(floorProgram);
+        GLES20.glUniform3fv(floorLightPosParam, 1,
+                lightPosInEyeSpace, 0);
+        GLES20.glUniformMatrix4fv(floorModelParam, 1, false,
+                floorTransform, 0);
+        GLES20.glUniformMatrix4fv(floorModelViewParam, 1, false,
+                floorView, 0);
+        GLES20.glUniformMatrix4fv(floorMVPMatrixParam, 1, false,
+                modelViewProjection, 0);
+        GLES20.glVertexAttribPointer(floorPositionParam,
+                COORDS_PER_VERTEX,
+                GLES20.GL_FLOAT, false, 0, floorVerticesBuffer);
+        GLES20.glVertexAttribPointer(floorNormalParam, 3,
+                GLES20.GL_FLOAT, false, 0,
+                floorNormalsBuffer);
+        GLES20.glVertexAttribPointer(floorColorParam, 4,
+                GLES20.GL_FLOAT, false, 0,
+                floorColorsBuffer);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0,
+                floorVertexCount);
+    }
+
+
     private void initializeScene() {
         // Position the triangle
         Matrix.setIdentityM(triTransform, 0);
@@ -219,6 +276,10 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         Matrix.setIdentityM(cubeTransform, 0);
         Matrix.translateM(cubeTransform, 0, 0, 0, -cubeDistance);
         Matrix.rotateM(cubeTransform, 0, 30, 1, 1, 0);
+
+        // Position the floor
+        Matrix.setIdentityM(floorTransform, 0);
+        Matrix.translateM(floorTransform, 0, 0, -floorDepth, 0);
     }
 
     private void compileShaders() {
@@ -227,6 +288,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         lightVertexShader = loadShader(GLES20.GL_VERTEX_SHADER, R.raw.light_vertex);
         passthroughFragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, R.raw.passthrough_fragment);
+
+        gridFragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, R.raw.grid_fragment);
     }
 
     private void prepareRenderingTriangle() {
@@ -306,6 +369,49 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         GLES20.glEnableVertexAttribArray(cubePositionParam);
         GLES20.glEnableVertexAttribArray(cubeNormalParam);
         GLES20.glEnableVertexAttribArray(cubeColorParam);
+    }
+
+    private void prepareRenderingFloor() {
+        // Allocate buffers
+        ByteBuffer bb = ByteBuffer.allocateDirect(floorCoords.length * 4);
+        bb.order(ByteOrder.nativeOrder());
+        floorVerticesBuffer = bb.asFloatBuffer();
+        floorVerticesBuffer.put(floorCoords);
+        floorVerticesBuffer.position(0);
+
+        ByteBuffer bbColors = ByteBuffer.allocateDirect(floorColors.length * 4);
+        bbColors.order(ByteOrder.nativeOrder());
+        floorColorsBuffer = bbColors.asFloatBuffer();
+        floorColorsBuffer.put(floorColors);
+        floorColorsBuffer.position(0);
+
+        ByteBuffer bbNormals = ByteBuffer.allocateDirect(floorNormals.length * 4);
+        bbNormals.order(ByteOrder.nativeOrder());
+        floorNormalsBuffer = bbNormals.asFloatBuffer();
+        floorNormalsBuffer.put(floorNormals);
+        floorNormalsBuffer.position(0);
+
+        // Create GL program
+        floorProgram = GLES20.glCreateProgram();
+        GLES20.glAttachShader(floorProgram, lightVertexShader);
+        GLES20.glAttachShader(floorProgram, gridFragmentShader);
+        GLES20.glLinkProgram(floorProgram);
+        GLES20.glUseProgram(floorProgram);
+
+        // Get shader params
+        floorPositionParam = GLES20.glGetAttribLocation(floorProgram, "a_Position");
+        floorNormalParam = GLES20.glGetAttribLocation(floorProgram, "a_Normal");
+        floorColorParam = GLES20.glGetAttribLocation(floorProgram, "a_Color");
+
+        floorModelParam = GLES20.glGetUniformLocation(floorProgram, "u_Model");
+        floorModelViewParam = GLES20.glGetUniformLocation(floorProgram, "u_MVMatrix");
+        floorMVPMatrixParam = GLES20.glGetUniformLocation(floorProgram, "u_MVP");
+        floorLightPosParam = GLES20.glGetUniformLocation(floorProgram, "u_LightPos");
+
+        // Enable arrays
+        GLES20.glEnableVertexAttribArray(floorPositionParam);
+        GLES20.glEnableVertexAttribArray(floorNormalParam);
+        GLES20.glEnableVertexAttribArray(floorColorParam);
     }
 
 
