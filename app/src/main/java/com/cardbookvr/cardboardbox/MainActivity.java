@@ -38,6 +38,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private float triColor[] = { 0.8f, 0.6f, 0.2f, 0.0f };
     private FloatBuffer triVerticesBuffer;
 
+    private float[] triTransform;
+
     // Viewing variables
     private static final float Z_NEAR = 0.1f;
     private static final float Z_FAR = 100.0f;
@@ -46,6 +48,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private float[] camera;
     private float[] view;
     private float[] modelViewProjection;
+
+    private float[] triView;
 
     // Rendering variables
     private int simpleVertexShader;
@@ -68,6 +72,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         camera = new float[16];
         view = new float[16];
         modelViewProjection = new float[16];
+
+        triTransform = new float[16];
+        triView = new float[16];
     }
 
     @Override
@@ -88,7 +95,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         float[] perspective = eye.getPerspective(Z_NEAR, Z_FAR);
 
         // Apply perspective transformation to the view, and draw
-        Matrix.multiplyMM(modelViewProjection, 0, perspective, 0, view, 0);
+        Matrix.multiplyMM(triView, 0, view, 0, triTransform, 0);
+        Matrix.multiplyMM(modelViewProjection, 0, perspective, 0, triView, 0);
 
         drawTriangle();
     }
@@ -134,6 +142,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     }
 
     private void initializeScene() {
+        // Position the triangle
+        Matrix.setIdentityM(triTransform, 0);
+        Matrix.translateM(triTransform, 0, 5, 0, -5);
     }
 
     private void compileShaders() {
